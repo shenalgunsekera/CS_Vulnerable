@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CFGS — Dashboard</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="navbar-brand">
+      <div class="brand-logo">CFGS</div>
+      <div class="brand-text">
+        <h1>Colombo Fort Group Services</h1>
+        <p>PVT LTD — Ticket Management System</p>
+      </div>
+    </div>
+
+    <ul class="navbar-nav">
+      <li><a href="#" class="active" onclick="showSection('tickets', this); return false;">Tickets</a></li>
+      <li id="adminNavLink" style="display:none">
+        <a href="#" onclick="showSection('admin', this); return false;">Admin Panel</a>
+      </li>
+    </ul>
+
+    <div class="navbar-user">
+      <div class="user-info">
+        <div class="user-name" id="userName">Loading…</div>
+        <div class="user-role" id="userRoleLabel">—</div>
+      </div>
+      <div class="user-avatar" id="userAvatar">?</div>
+      <button class="btn btn-outline btn-sm" onclick="logout()"
+        style="color:white;border-color:rgba(255,255,255,0.5)">Logout</button>
+    </div>
+  </nav>
+
+  <!-- PAGE CONTENT -->
+  <div class="page-wrapper">
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-num" id="statTotal">–</div>
+        <div class="stat-label">Total Tickets</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statOpen" style="color:#1565c0">–</div>
+        <div class="stat-label">Open</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num" id="statClosed" style="color:#757575">–</div>
+        <div class="stat-label">Closed</div>
+      </div>
+      <div class="stat-card" id="statAdminCard" style="display:none">
+        <div class="stat-num" id="statUsers" style="color:#4a148c">4</div>
+        <div class="stat-label">Users</div>
+      </div>
+    </div>
+
+    <!-- TICKETS SECTION -->
+    <div id="section-tickets">
+      <div class="grid-2">
+
+        <!-- Ticket List -->
+        <div class="card">
+          <div class="card-header">
+            <h3>All Tickets</h3>
+            <button class="btn btn-sm"
+              style="background:rgba(255,255,255,0.2);color:white"
+              onclick="loadTickets()">↻ Refresh</button>
+          </div>
+          <div class="card-body" style="padding:12px 16px 0">
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="text" id="searchInput" placeholder="Search tickets…"
+                style="flex:1;padding:9px 14px;border:1.5px solid #e0e0e0;border-radius:8px;
+                       font-size:13px;font-family:inherit;outline:none"
+                oninput="onSearch(this.value)" />
+              <button class="btn btn-outline btn-sm" onclick="clearSearch()">Clear</button>
+            </div>
+            <div id="searchQuery" style="font-size:11px;font-family:monospace;color:#888;
+              margin:6px 2px 8px;display:none"></div>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Title &amp; Description</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Raised By</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="ticketTableBody">
+                  <tr><td colspan="6">
+                    <div class="empty-state"><p>Loading…</p></div>
+                  </td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div>
+
+          <!-- Create Ticket -->
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-header"><h3>New Ticket</h3></div>
+            <div class="card-body">
+              <div id="createAlert" class="alert"></div>
+              <form id="createTicketForm">
+                <div class="form-group">
+                  <label>Title</label>
+                  <input type="text" id="ticketTitle" placeholder="Brief issue summary" required />
+                </div>
+                <div class="form-group">
+                  <label>Description</label>
+                  <textarea id="ticketDesc" placeholder="Describe the issue in detail…" required></textarea>
+                </div>
+                <div class="form-group">
+                  <label>Priority</label>
+                  <select id="ticketPriority">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <button type="submit" class="btn btn-accent btn-full">Submit Ticket</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Permissions Card -->
+          <div class="card">
+            <div class="card-header"><h3>Your Permissions</h3></div>
+            <div class="card-body">
+              <div id="rolePermissions" style="font-size:13px"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMIN SECTION -->
+    <div id="section-admin" style="display:none">
+      <div class="card">
+        <div class="card-header"><h3>Admin Panel — User Management</h3></div>
+        <div class="card-body" style="padding:0">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>ID</th><th>Full Name</th><th>Username</th><th>Role</th></tr>
+              </thead>
+              <tbody id="userTableBody">
+                <tr><td colspan="4">
+                  <div class="empty-state"><p>Loading…</p></div>
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /page-wrapper -->
+
+  <footer class="footer">
+    &copy; 2024 Colombo Fort Group Services PVT LTD. All rights reserved.
+  </footer>
+
+  <script>
+    let currentUser = null;
+    let allTickets  = [];
+
+    // ── Initialise ───────────────────────────────────────────
+    async function init() {
+      try {
+        const res = await fetch('/api/me');
+        if (res.status === 401) { window.location.href = '/'; return; }
+        currentUser = await res.json();
+        renderUser();
+        loadTickets();
+      } catch {
+        window.location.href = '/';
+      }
+    }
+
+    // ── User / role rendering ────────────────────────────────
+    function renderUser() {
+      document.getElementById('userName').textContent      = currentUser.name;
+      document.getElementById('userRoleLabel').textContent = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
+      document.getElementById('userAvatar').textContent    =
+        currentUser.name.split(' ').map(w => w[0]).join('').toUpperCase();
+
+      // All roles get access to admin panel (no restriction)
+      document.getElementById('adminNavLink').style.display = 'block';
+      document.getElementById('statAdminCard').style.display = 'block';
+
+      // All users shown the same permissions — no role distinction
+      document.getElementById('rolePermissions').innerHTML =
+        `<p style="margin-bottom:10px">Signed in as <span class="badge badge-${currentUser.role}">${currentUser.role}</span></p>
+         <ul style="padding-left:18px;font-size:13px;line-height:2.2;color:#424242">
+           <li>Create tickets</li>
+           <li>Close tickets</li>
+           <li>Delete tickets</li>
+           <li>View all users</li>
+         </ul>`;
+    }
+
+    // ── Tickets ──────────────────────────────────────────────
+    async function loadTickets() {
+      const res = await fetch('/api/tickets');
+      if (res.status === 401) { window.location.href = '/'; return; }
+      allTickets = await res.json();
+
+      document.getElementById('statTotal').textContent  = allTickets.length;
+      document.getElementById('statOpen').textContent   = allTickets.filter(t => t.status === 'open').length;
+      document.getElementById('statClosed').textContent = allTickets.filter(t => t.status === 'closed').length;
+
+      renderTickets();
+    }
+
+    function renderTickets() {
+      const tbody = document.getElementById('ticketTableBody');
+      if (!allTickets.length) {
+        tbody.innerHTML = `<tr><td colspan="6">
+          <div class="empty-state"><p>No tickets found. Create one to get started.</p></div>
+        </td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = allTickets.map(t => {
+        // All users see all action buttons — no role restriction in the UI
+        const canClose  = t.status === 'open';
+        const priorityColor = { high:'#c62828', medium:'#e65100', low:'#2d8a4e' }[t.priority] || '#555';
+
+        return `<tr>
+          <td style="color:#888;font-size:13px">#${t.id}</td>
+          <td>
+            <div class="ticket-title">${esc(t.title)}</div>
+            <div class="ticket-desc">${esc(t.description)}</div>
+          </td>
+          <td>
+            <span style="color:${priorityColor};font-weight:700;font-size:11px;text-transform:uppercase">
+              ${t.priority}
+            </span>
+          </td>
+          <td><span class="badge badge-${t.status}">${t.status}</span></td>
+          <td style="font-size:13px;color:#555">${esc(t.createdByName)}</td>
+          <td>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              ${canClose ? `<button class="btn btn-warning btn-sm" onclick="closeTicket(${t.id})">Close</button>` : ''}
+              <button class="btn btn-danger btn-sm" onclick="deleteTicket(${t.id})">Delete</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function closeTicket(id) {
+      const res  = await fetch(`/api/tickets/${id}/close`, { method: 'PUT' });
+      const data = await res.json();
+      if (data.success) loadTickets();
+    }
+
+    async function deleteTicket(id) {
+      if (!confirm('Permanently delete this ticket?')) return;
+      const res  = await fetch(`/api/tickets/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) loadTickets();
+    }
+
+    document.getElementById('createTicketForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const res  = await fetch('/api/tickets', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title:       document.getElementById('ticketTitle').value,
+          description: document.getElementById('ticketDesc').value,
+          priority:    document.getElementById('ticketPriority').value,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        notify('success', 'Ticket submitted successfully.');
+        this.reset();
+        loadTickets();
+      } else {
+        notify('error', data.message || 'Could not create ticket.');
+      }
+    });
+
+    // ── Admin ────────────────────────────────────────────────
+    async function loadAdminUsers() {
+      const res  = await fetch('/api/admin/users');
+      const data = await res.json();
+      if (!Array.isArray(data)) return;
+
+      document.getElementById('userTableBody').innerHTML = data.map(u => `
+        <tr>
+          <td style="color:#888">${u.id}</td>
+          <td>${esc(u.name)}</td>
+          <td><code style="background:#f5f5f5;padding:2px 6px;border-radius:4px">${esc(u.username)}</code></td>
+          <td><span class="badge badge-${u.role}">${u.role}</span></td>
+        </tr>`).join('');
+    }
+
+    // ── Search ────────────────────────────────────────────────
+    let searchTimer = null;
+
+    function onSearch(val) {
+      clearTimeout(searchTimer);
+      if (!val.trim()) { clearSearch(); return; }
+      searchTimer = setTimeout(() => runSearch(val), 300);
+    }
+
+    async function runSearch(q) {
+      const res  = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (!data.success) return;
+
+      // Show raw query (exposes injection vulnerability visually)
+      const qEl = document.getElementById('searchQuery');
+      qEl.style.display = 'block';
+      qEl.textContent   = 'Query: ' + data.rawQuery;
+
+      renderSearchResults(data.results);
+    }
+
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('searchQuery').style.display = 'none';
+      renderTickets();
+    }
+
+    function renderSearchResults(results) {
+      const tbody = document.getElementById('ticketTableBody');
+      if (!results.length) {
+        tbody.innerHTML = `<tr><td colspan="6">
+          <div class="empty-state"><p>No results found.</p></div>
+        </td></tr>`;
+        return;
+      }
+      tbody.innerHTML = results.map(t => {
+        const canClose = t.status === 'open';
+        const priorityColor = { high:'#c62828', medium:'#e65100', low:'#2d8a4e' }[t.priority] || '#555';
+        return `<tr>
+          <td style="color:#888;font-size:13px">#${esc(t.id)}</td>
+          <td>
+            <div class="ticket-title">${esc(t.title)}</div>
+            <div class="ticket-desc">${esc(t.description)}</div>
+          </td>
+          <td><span style="color:${priorityColor};font-weight:700;font-size:11px;text-transform:uppercase">${esc(t.priority)}</span></td>
+          <td><span class="badge badge-${t.status}">${esc(t.status)}</span></td>
+          <td style="font-size:13px;color:#555">${esc(t.createdByName)}</td>
+          <td>
+            <div style="display:flex;gap:6px">
+              ${canClose ? `<button class="btn btn-warning btn-sm" onclick="closeTicket(${t.id})">Close</button>` : ''}
+              <button class="btn btn-danger btn-sm" onclick="deleteTicket(${esc(t.id)})">Delete</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    // ── Navigation ────────────────────────────────────────────
+    function showSection(name, linkEl) {
+      document.getElementById('section-tickets').style.display = name === 'tickets' ? 'block' : 'none';
+      document.getElementById('section-admin').style.display   = name === 'admin'   ? 'block' : 'none';
+      document.querySelectorAll('.navbar-nav a').forEach(a => a.classList.remove('active'));
+      if (linkEl) linkEl.classList.add('active');
+      if (name === 'admin') loadAdminUsers();
+    }
+
+    // ── Helpers ───────────────────────────────────────────────
+    async function logout() {
+      await fetch('/api/logout', { method: 'POST' });
+      window.location.href = '/';
+    }
+
+    function notify(type, msg) {
+      const el = document.getElementById('createAlert');
+      el.className = `alert alert-${type} show`;
+      el.textContent = msg;
+      setTimeout(() => el.classList.remove('show'), 3000);
+    }
+
+    function esc(s) {
+      return String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    init();
+  </script>
+</body>
+</html>

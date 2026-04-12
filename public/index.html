@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CFGS — Sign In</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="login-page">
+
+  <div class="login-container">
+    <div class="login-box">
+
+      <div class="login-header">
+        <div class="login-logo">CFGS</div>
+        <h1>Colombo Fort Group Services</h1>
+        <p>PVT LTD &nbsp;·&nbsp; Internal Ticket System</p>
+      </div>
+
+      <div class="login-card">
+        <h2>Welcome Back</h2>
+        <p class="subtitle">Sign in to access your dashboard</p>
+
+        <div id="alert" class="alert alert-error">
+          <span>⚠</span>
+          <span id="alert-msg">Invalid credentials</span>
+        </div>
+
+        <form id="loginForm">
+          <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username"
+              placeholder="Enter your username" autocomplete="username" required />
+          </div>
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password"
+              placeholder="Enter your password" autocomplete="current-password" required />
+          </div>
+          <button type="submit" class="btn btn-primary btn-full" id="loginBtn">
+            Sign In
+          </button>
+        </form>
+
+        <div class="demo-creds">
+          <h4>Demo Credentials — click to fill</h4>
+          <table>
+            <thead>
+              <tr><th>Username</th><th>Password</th><th>Role</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code onclick="fillCreds('admin','admin123')">admin</code></td>
+                <td><code onclick="fillCreds('admin','admin123')">admin123</code></td>
+                <td><span class="badge badge-admin">Admin</span></td>
+              </tr>
+              <tr>
+                <td><code onclick="fillCreds('manager1','manager123')">manager1</code></td>
+                <td><code onclick="fillCreds('manager1','manager123')">manager123</code></td>
+                <td><span class="badge badge-manager">Manager</span></td>
+              </tr>
+              <tr>
+                <td><code onclick="fillCreds('employee1','emp123')">employee1</code></td>
+                <td><code onclick="fillCreds('employee1','emp123')">emp123</code></td>
+                <td><span class="badge badge-employee">Employee</span></td>
+              </tr>
+              <tr>
+                <td><code onclick="fillCreds('employee2','emp456')">employee2</code></td>
+                <td><code onclick="fillCreds('employee2','emp456')">emp456</code></td>
+                <td><span class="badge badge-employee">Employee</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    &copy; 2024 Colombo Fort Group Services PVT LTD. All rights reserved.
+  </footer>
+
+  <script>
+    function fillCreds(user, pass) {
+      document.getElementById('username').value = user;
+      document.getElementById('password').value = pass;
+    }
+
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      btn.textContent = 'Signing in…';
+      btn.disabled = true;
+
+      try {
+        const res  = await fetch('/api/login', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({
+            username: document.getElementById('username').value,
+            password: document.getElementById('password').value,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          window.location.href = '/dashboard.html';
+        } else {
+          showAlert(data.message || 'Invalid credentials.');
+        }
+      } catch {
+        showAlert('Connection error. Make sure the server is running.');
+      } finally {
+        btn.textContent = 'Sign In';
+        btn.disabled = false;
+      }
+    });
+
+    function showAlert(msg) {
+      const el = document.getElementById('alert');
+      document.getElementById('alert-msg').textContent = msg;
+      el.classList.add('show');
+      setTimeout(() => el.classList.remove('show'), 4000);
+    }
+
+    fetch('/api/me').then(r => r.json()).then(d => {
+      if (d.id) window.location.href = '/dashboard.html';
+    }).catch(() => {});
+  </script>
+</body>
+</html>
