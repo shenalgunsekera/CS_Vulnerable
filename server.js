@@ -13,6 +13,7 @@
  *  (B) Privilege Escalation - no backend role enforcement
  *  (C) SQL Injection        - raw string concatenation in queries,
  *                             UNION attack extracts all user passwords
+ *                             *** NOW USES REAL SQLite DATABASE ***
  *  (D) Ping of Death        - /api/ping endpoint has no payload size limit,
  *                             oversized packets exhaust memory and crash the process
  *  (E) MMCC Backdoor        - Unauthenticated Multimedia Conference Control
@@ -24,16 +25,67 @@ const express        = require('express');
 const session        = require('express-session');
 const path           = require('path');
 const net            = require('net');
+const Database       = require('better-sqlite3');
 
-const app      = express();
-const PORT     = 3000;
+const app       = express();
+const PORT      = 3000;
 const MMCC_PORT = 5050;
 
+// ── Real SQLite Database Setup ──────────────────────────────
+// VULNERABILITY (C): Uses a real SQLite database with raw string
+// concatenation in queries — real SQL injection is possible!
+
+const db = new Database('./cfgs_vulnerable.db');
+
+// Create tables and seed data on startup
+db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    password TEXT NOT NULL,
+    role     TEXT NOT NULL,
+    name     TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS tickets (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    title         TEXT NOT NULL,
+    description   TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'open',
+    priority      TEXT NOT NULL DEFAULT 'medium',
+    createdBy     INTEGER NOT NULL,
+    createdByName TEXT NOT NULL,
+    createdAt     TEXT NOT NULL
+  );
+`);
+
+// Seed users if empty — VULNERABILITY: passwords stored in plaintext
+const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+if (userCount === 0) {
+  const insertUser = db.prepare(
+    'INSERT INTO users (username, password, role, name) VALUES (?, ?, ?, ?)'
+  );
+  insertUser.run('admin',     'admin123',   'admin',    'Admin User');
+  insertUser.run('manager1',  'manager123', 'manager',  'John Manager');
+  insertUser.run('employee1', 'emp123',     'employee', 'Alice Employee');
+  insertUser.run('employee2', 'emp456',     'employee', 'Bob Employee');
+}
+
+// Seed tickets if empty
+const ticketCount = db.prepare('SELECT COUNT(*) as c FROM tickets').get().c;
+if (ticketCount === 0) {
+  const insertTicket = db.prepare(
+    'INSERT INTO tickets (title, description, status, priority, createdBy, createdByName, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  );
+  insertTicket.run('Network Issue in 3rd Floor', 'WiFi drops every hour on the 3rd floor.',  'open',   'high',   3, 'Alice Employee', new Date(Date.now() - 86400000).toISOString());
+  insertTicket.run('Printer Not Working',         'HP printer in accounts dept is offline.',  'open',   'medium', 4, 'Bob Employee',   new Date(Date.now() - 43200000).toISOString());
+  insertTicket.run('Software License Renewal',    'Adobe CC license expires next week.',      'closed', 'low',    3, 'Alice Employee', new Date(Date.now() - 172800000).toISOString());
+}
+
+console.log('  📦  SQLite database ready: cfgs_vulnerable.db');
+
 // ── Middleware ──────────────────────────────────────────────
-// VULNERABILITY (D): express.raw() with NO size limit — accepts any payload size.
-// A crafted oversized "ping" request will force the server to buffer the entire
-// body in memory before responding, just like the original Ping of Death caused
-// the OS to allocate a buffer larger than it could safely handle.
+// VULNERABILITY (D): express.raw() with NO size limit
 app.use('/api/ping', express.raw({ type: '*/*', limit: Infinity }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -41,44 +93,23 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 /**
  * VULNERABILITY (A): Insecure session configuration
- *
- * Problems:
- *  - httpOnly: false  → JavaScript (document.cookie) can read the session cookie
- *  - secure: false    → Cookie sent over plain HTTP (no HTTPS required)
- *  - No maxAge        → Session never expires (no timeout)
- *  - No sameSite      → Cookie sent on cross-site requests (CSRF risk)
- *  - Weak secret      → Easy to brute-force if attacker gets session store access
+ *  - httpOnly: false  → JS can read document.cookie
+ *  - secure: false    → works over plain HTTP
+ *  - No maxAge        → session never expires
+ *  - No sameSite      → CSRF risk
+ *  - Weak secret
  */
 app.use(session({
-  secret:            'cfgs-weak-secret-123',  // VULNERABILITY: Weak, hardcoded secret
+  secret:            'cfgs-weak-secret-123',
   resave:            true,
   saveUninitialized: true,
   cookie: {
-    httpOnly: false,   // VULNERABILITY: JS can read document.cookie
-    secure:   false,   // VULNERABILITY: Works over HTTP
-    // maxAge:  not set → no expiry, session lasts forever
-    // sameSite: not set → no CSRF protection
+    httpOnly: false,
+    secure:   false,
   }
 }));
 
-// ── In-Memory Data Store ────────────────────────────────────
-// In a real app this would be a database
-const USERS = [
-  { id: 1, username: 'admin',     password: 'admin123',   role: 'admin',    name: 'Admin User'     },
-  { id: 2, username: 'manager1',  password: 'manager123', role: 'manager',  name: 'John Manager'   },
-  { id: 3, username: 'employee1', password: 'emp123',     role: 'employee', name: 'Alice Employee' },
-  { id: 4, username: 'employee2', password: 'emp456',     role: 'employee', name: 'Bob Employee'   },
-];
-
-// VULNERABILITY: Passwords stored in plaintext (no hashing)
-let tickets = [
-  { id: 1, title: 'Network Issue in 3rd Floor',  description: 'WiFi drops every hour on the 3rd floor.',    status: 'open',   createdBy: 3, createdByName: 'Alice Employee', priority: 'high',   createdAt: new Date(Date.now() - 86400000).toISOString() },
-  { id: 2, title: 'Printer Not Working',          description: 'HP printer in accounts dept is offline.',    status: 'open',   createdBy: 4, createdByName: 'Bob Employee',   priority: 'medium', createdAt: new Date(Date.now() - 43200000).toISOString() },
-  { id: 3, title: 'Software License Renewal',     description: 'Adobe CC license expires next week.',        status: 'closed', createdBy: 3, createdByName: 'Alice Employee', priority: 'low',    createdAt: new Date(Date.now() - 172800000).toISOString() },
-];
-let ticketIdCounter = 4;
-
-// ── Helper: Check if logged in ──────────────────────────────
+// ── Helper ──────────────────────────────────────────────────
 function requireLogin(req, res, next) {
   if (!req.session.user) {
     return res.status(401).json({ error: 'Not authenticated. Please log in.' });
@@ -90,25 +121,21 @@ function requireLogin(req, res, next) {
 
 /**
  * POST /api/login
- *
- * VULNERABILITY (A): Session Fixation / Hijacking
- *  - Session ID is NOT regenerated after login
- *  - An attacker who sets a session ID before login can hijack the session
- *    after the victim logs in (session fixation attack)
- *  - The existing session object is simply populated with user data
+ * VULNERABILITY (A): Session NOT regenerated after login
  */
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
 
-  // VULNERABILITY: Plain string comparison, no rate limiting
-  const user = USERS.find(u => u.username === username && u.password === password);
+  // VULNERABILITY: Plain comparison, no rate limiting
+  const user = db.prepare(
+    'SELECT * FROM users WHERE username = ? AND password = ?'
+  ).get(username, password);
 
   if (!user) {
     return res.json({ success: false, message: 'Invalid username or password.' });
   }
 
-  // VULNERABILITY: req.session.regenerate() is NOT called here
-  // The old session ID is reused after login, enabling session fixation
+  // VULNERABILITY: session.regenerate() NOT called
   req.session.user = {
     id:       user.id,
     username: user.username,
@@ -121,12 +148,10 @@ app.post('/api/login', (req, res) => {
 
 // POST /api/logout
 app.post('/api/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.json({ success: true });
-  });
+  req.session.destroy(() => res.json({ success: true }));
 });
 
-// GET /api/me - return current session user
+// GET /api/me
 app.get('/api/me', requireLogin, (req, res) => {
   res.json(req.session.user);
 });
@@ -135,10 +160,11 @@ app.get('/api/me', requireLogin, (req, res) => {
 
 // GET /api/tickets
 app.get('/api/tickets', requireLogin, (req, res) => {
+  const tickets = db.prepare('SELECT * FROM tickets').all();
   res.json(tickets);
 });
 
-// POST /api/tickets - Create a new ticket
+// POST /api/tickets
 app.post('/api/tickets', requireLogin, (req, res) => {
   const { title, description, priority } = req.body;
 
@@ -146,57 +172,48 @@ app.post('/api/tickets', requireLogin, (req, res) => {
     return res.json({ success: false, message: 'Title and description are required.' });
   }
 
-  const ticket = {
-    id:            ticketIdCounter++,
-    title:         title.trim(),
-    description:   description.trim(),
-    status:        'open',
-    priority:      priority || 'medium',
-    createdBy:     req.session.user.id,
-    createdByName: req.session.user.name,
-    createdAt:     new Date().toISOString(),
-  };
+  const result = db.prepare(
+    'INSERT INTO tickets (title, description, status, priority, createdBy, createdByName, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)'
+  ).run(
+    title.trim(),
+    description.trim(),
+    'open',
+    priority || 'medium',
+    req.session.user.id,
+    req.session.user.name,
+    new Date().toISOString()
+  );
 
-  tickets.push(ticket);
+  const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(result.lastInsertRowid);
   res.json({ success: true, ticket });
 });
 
 /**
  * PUT /api/tickets/:id/close
- *
- * VULNERABILITY (B): Privilege Escalation — No backend role check
- *
- * The frontend only shows "Close" buttons to managers and admins.
- * However, this endpoint performs NO role check on the server.
- * Any authenticated user (including employees) can directly call
- * this API and close any ticket.
- *
- * Attack: POST from browser console or any HTTP tool as employee:
- *   fetch('/api/tickets/1/close', { method:'PUT' })
+ * VULNERABILITY (B): No role check — any logged-in user can close tickets
+ * Attack: fetch('/api/tickets/1/close', { method:'PUT' })
  */
 app.put('/api/tickets/:id/close', requireLogin, (req, res) => {
-  // VULNERABILITY: No role check — any logged-in user can close tickets
-  const ticket = tickets.find(t => t.id === parseInt(req.params.id));
+  const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(parseInt(req.params.id));
 
   if (!ticket) return res.json({ success: false, message: 'Ticket not found.' });
   if (ticket.status === 'closed') return res.json({ success: false, message: 'Already closed.' });
 
-  ticket.status = 'closed';
+  db.prepare('UPDATE tickets SET status = ? WHERE id = ?').run('closed', ticket.id);
   res.json({ success: true });
 });
 
 /**
  * DELETE /api/tickets/:id
- *
- * VULNERABILITY (B): No role check at all — any logged-in user can delete.
+ * VULNERABILITY (B): No role check
  */
 app.delete('/api/tickets/:id', requireLogin, (req, res) => {
-  // VULNERABILITY: No role check — any authenticated user can delete tickets
   const id = parseInt(req.params.id);
-  const exists = tickets.some(t => t.id === id);
-  if (!exists) return res.json({ success: false, message: 'Ticket not found.' });
+  const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(id);
 
-  tickets = tickets.filter(t => t.id !== id);
+  if (!ticket) return res.json({ success: false, message: 'Ticket not found.' });
+
+  db.prepare('DELETE FROM tickets WHERE id = ?').run(id);
   res.json({ success: true });
 });
 
@@ -204,153 +221,63 @@ app.delete('/api/tickets/:id', requireLogin, (req, res) => {
 
 /**
  * GET /api/admin/users
- *
- * VULNERABILITY (B): Privilege Escalation — No role check
- *
- * This is an "admin-only" endpoint that returns all user data.
- * The frontend only shows admin panel links to admins, but the
- * backend does NOT verify the user's role.
- * Any logged-in user can access this endpoint directly.
- *
- * Attack: In browser console as employee:
- *   fetch('/api/admin/users').then(r=>r.json()).then(console.log)
+ * VULNERABILITY (B): No role check — any logged-in user can access
+ * Attack: fetch('/api/admin/users').then(r=>r.json()).then(console.log)
  */
 app.get('/api/admin/users', requireLogin, (req, res) => {
-  // VULNERABILITY: requireLogin only checks if logged in, NOT if user is admin
-  res.json(USERS.map(u => ({
-    id:       u.id,
-    username: u.username,
-    role:     u.role,
-    name:     u.name,
-    // VULNERABILITY: Would expose passwords if we returned u directly
-  })));
+  // VULNERABILITY: No admin check, and returns all users from real DB
+  const users = db.prepare('SELECT id, username, role, name FROM users').all();
+  res.json(users);
 });
 
 // ── SQL INJECTION (C) ────────────────────────────────────────
 
 /**
- * Simulated in-memory database for the SQL injection demo.
- * Mirrors the same data that real app uses, so injection results are realistic.
- * In a real app this would be SQLite / MySQL / PostgreSQL.
- */
-const DB = {
-  // tickets is a reference — stays in sync with the live array
-  get tickets() { return tickets; },
-  // users table contains passwords — the prize for a successful injection
-  users: USERS,
-};
-
-/**
  * GET /api/search?q=QUERY
  *
- * VULNERABILITY (C): SQL Injection via string concatenation
+ * VULNERABILITY (C): REAL SQL Injection via string concatenation
  *
- * The search term is inserted directly into the query string with no
- * sanitisation. An attacker can break out of the LIKE clause and append
- * a UNION SELECT to read any other "table" — including the users table
- * which contains plaintext passwords.
+ * The search term is inserted DIRECTLY into the SQLite query string.
+ * This is a REAL SQL injection against a real database.
  *
  * Normal use:  /api/search?q=wifi
- * Attack:      /api/search?q=' UNION SELECT id,username,password,role,name,name,name FROM users --
  *
- * Result: All user credentials appear in the search results disguised as tickets.
+ * Attack (dump all passwords):
+ *   /api/search?q=' UNION SELECT id,username,password,role,name,name,createdAt FROM users --
+ *
+ * Result: All usernames and plaintext passwords appear in search results!
  */
 app.get('/api/search', requireLogin, (req, res) => {
   const q = req.query.q || '';
 
-  // VULNERABILITY: user input lands directly in the query — never do this
+  // VULNERABILITY: User input directly concatenated into SQL query
   const rawQuery =
-    `SELECT id,title,description,status,priority,createdByName,createdAt ` +
+    `SELECT id, title, description, status, priority, createdByName, createdAt ` +
     `FROM tickets WHERE title LIKE '%${q}%' OR description LIKE '%${q}%'`;
 
   try {
-    const results = vulnerableExecuteQuery(rawQuery);
+    // VULNERABILITY: Raw query executed against real SQLite database
+    const results = db.prepare(rawQuery).all();
     res.json({ success: true, results, rawQuery });
   } catch (e) {
+    // Error message may reveal DB structure — another vulnerability
     res.json({ success: false, error: e.message, rawQuery });
   }
 });
-
-/**
- * Simulated SQL executor — processes the raw query string against the
- * in-memory DB object and supports UNION SELECT injection.
- */
-function vulnerableExecuteQuery(sql) {
-  const OUTPUT_COLS = ['id','title','description','status','priority','createdByName','createdAt'];
-
-  // Detect UNION injection pattern
-  const unionMatch = sql.match(/UNION\s+SELECT\s+(.+?)\s+FROM\s+(\w+)\s*(?:--.*)?$/i);
-
-  if (unionMatch) {
-    const injectedCols = unionMatch[1].split(',').map(c => c.trim().replace(/'/g,''));
-    const targetTable  = unionMatch[2].toLowerCase();
-
-    // Base results (the legitimate part of the query, before UNION)
-    const baseResults = executeBasicSearch(sql.split(/UNION\s+SELECT/i)[0]);
-
-    // Injected rows from the targeted table (e.g. "users")
-    const tableData    = DB[targetTable] || [];
-    const injectedRows = tableData.map(row => {
-      const result = {};
-      OUTPUT_COLS.forEach((col, i) => {
-        const src = injectedCols[i];
-        result[col] = row[src] !== undefined ? String(row[src]) : src;
-      });
-      return result;
-    });
-
-    return [...baseResults, ...injectedRows];
-  }
-
-  return executeBasicSearch(sql);
-}
-
-function executeBasicSearch(sql) {
-  const OUTPUT_COLS = ['id','title','description','status','priority','createdByName','createdAt'];
-  const match = sql.match(/LIKE\s+'%([^%']*?)%'/i);
-  const q     = (match ? match[1] : '').toLowerCase();
-
-  return DB.tickets
-    .filter(t => !q ||
-      t.title.toLowerCase().includes(q) ||
-      t.description.toLowerCase().includes(q))
-    .map(t => {
-      const r = {};
-      OUTPUT_COLS.forEach(c => { r[c] = t[c] !== undefined ? String(t[c]) : ''; });
-      return r;
-    });
-}
 
 // ── PING OF DEATH (D) ────────────────────────────────────────
 
 /**
  * POST /api/ping
- *
- * VULNERABILITY (D): Ping of Death — no payload size validation
- *
- * Classic Ping of Death: attacker sends an ICMP packet whose payload,
- * when reassembled from fragments, exceeds 65,535 bytes. The target OS
- * tries to allocate a buffer for the full packet, overflows, and crashes.
- *
- * Web equivalent here: this endpoint reads and echoes back the entire
- * request body with NO size check. Sending a massive payload forces the
- * Node.js process to buffer all of it in memory simultaneously.
- * A large enough request (e.g. 500 MB) will exhaust heap memory and
- * crash the server with "JavaScript heap out of memory".
- *
- * The endpoint also reflects the byte count back — showing the attacker
- * exactly how much data the server was forced to handle.
+ * VULNERABILITY (D): No payload size limit
  */
 app.post('/api/ping', requireLogin, (req, res) => {
-  // VULNERABILITY: req.body is the full raw buffer — no size limit applied.
-  // The server must hold the entire payload in RAM to reach this line.
   const byteCount = req.body ? req.body.length : 0;
 
   res.json({
     success:   true,
     message:   'Pong!',
     bytesRead: byteCount,
-    // Echo a slice so the browser can confirm data was received
     preview:   req.body ? req.body.slice(0, 64).toString('utf8') : '',
     warning:   'VULNERABILITY: server buffered the entire payload with no size check.',
   });
@@ -360,26 +287,12 @@ app.post('/api/ping', requireLogin, (req, res) => {
 
 /**
  * VULNERABILITY (E): Unauthenticated MMCC Service on Port 5050
- *
- * A Multimedia Conference Control (MMCC) service runs on port 5050.
- * This service has NO authentication, NO encryption, and accepts raw
- * TCP connections from ANY host on the network.
- *
- * An attacker can:
- *  1. Discover port 5050 via Nmap:  nmap -sV -p 5050 192.168.8.103
- *  2. Connect directly via netcat:  ncat 192.168.8.103 5050
- *  3. Run commands to extract sensitive server/database info
- *  4. Use the open port as an entry point for further attacks
- *
- * Commands available (no login required):
- *  HELP, INFO, LIST, STATUS, VERSION, CONFIG, QUIT
+ * No auth, no encryption — anyone can connect and extract info
  */
 const mmccServer = net.createServer((socket) => {
   const clientAddr = socket.remoteAddress + ':' + socket.remotePort;
   console.log(`  [MMCC] Client connected: ${clientAddr}`);
 
-  // VULNERABILITY: Service banner reveals version and software details
-  // Attackers use banners to fingerprint services and find known exploits
   socket.write(
     '======================================\r\n' +
     '  CFGS Multimedia Conference Control  \r\n' +
@@ -391,7 +304,6 @@ const mmccServer = net.createServer((socket) => {
     '> '
   );
 
-  // VULNERABILITY: No authentication — any client gets immediate command access
   socket.on('data', (data) => {
     const command = data.toString().trim().toUpperCase();
     console.log(`  [MMCC] Command from ${clientAddr}: ${command}`);
@@ -412,24 +324,22 @@ const mmccServer = net.createServer((socket) => {
         break;
 
       case 'INFO':
-        // VULNERABILITY: Exposes sensitive server and database information
+        // VULNERABILITY: Exposes DB file path and server info
         socket.write(
           'Server Information:\r\n' +
-          '  Hostname : metasploitable\r\n' +
-          '  OS       : Linux 2.6.24\r\n' +
+          '  Hostname : cfgs-server\r\n' +
+          '  OS       : Windows/Linux\r\n' +
           '  Service  : MMCC v1.0\r\n' +
           `  Port     : ${MMCC_PORT}\r\n` +
           '  Web App  : http://localhost:3000\r\n' +
-          '  DB Host  : localhost\r\n' +
-          '  DB Name  : colobo_fort\r\n' +
-          '  DB User  : root\r\n' +
-          '  DB Pass  : (none)\r\n' +
+          '  DB Type  : SQLite\r\n' +
+          '  DB File  : ./cfgs_vulnerable.db\r\n' +
+          '  DB User  : (none - no auth)\r\n' +
           '> '
         );
         break;
 
       case 'LIST':
-        // VULNERABILITY: Exposes active user sessions and meeting info
         socket.write(
           'Active Conference Sessions:\r\n' +
           '  Session #1 | User: admin      | Room: Board Meeting  | Status: Active\r\n' +
@@ -440,7 +350,6 @@ const mmccServer = net.createServer((socket) => {
         break;
 
       case 'STATUS':
-        // VULNERABILITY: Confirms that auth and encryption are both disabled
         socket.write(
           'MMCC Service Status:\r\n' +
           '  Status   : RUNNING\r\n' +
@@ -463,15 +372,14 @@ const mmccServer = net.createServer((socket) => {
         break;
 
       case 'CONFIG':
-        // VULNERABILITY: Exposes full config including file paths
         socket.write(
           'Service Configuration:\r\n' +
           '  max_connections : unlimited\r\n' +
           '  auth_required   : false\r\n' +
           '  encryption      : none\r\n' +
           '  log_level       : verbose\r\n' +
-          '  web_root        : /var/www/colombofort\r\n' +
-          '  config_file     : /var/www/colombofort/config.php\r\n' +
+          '  db_file         : ./cfgs_vulnerable.db\r\n' +
+          '  web_root        : ./public\r\n' +
           '> '
         );
         break;
@@ -489,16 +397,10 @@ const mmccServer = net.createServer((socket) => {
     }
   });
 
-  socket.on('close', () => {
-    console.log(`  [MMCC] Client disconnected: ${clientAddr}`);
-  });
-
-  socket.on('error', (err) => {
-    console.log(`  [MMCC] Socket error: ${err.message}`);
-  });
+  socket.on('close', () => console.log(`  [MMCC] Client disconnected: ${clientAddr}`));
+  socket.on('error', (err) => console.log(`  [MMCC] Socket error: ${err.message}`));
 });
 
-// VULNERABILITY: Binds to 0.0.0.0 — reachable from any network interface
 mmccServer.listen(MMCC_PORT, '0.0.0.0', () => {
   console.log(`  🎙️  MMCC Service running on port ${MMCC_PORT} (NO AUTH — VULNERABLE)`);
 });
@@ -523,11 +425,12 @@ app.listen(PORT, () => {
   console.log('  Vulnerabilities:');
   console.log('  (A) Session Hijacking  — no timeout, JS-readable cookie');
   console.log('  (B) Privilege Escalation — no backend role enforcement');
-  console.log('  (C) SQL Injection      — UNION attack dumps passwords');
+  console.log('  (C) SQL Injection      — REAL SQLite DB, UNION attack dumps passwords');
   console.log('  (D) Ping of Death      — POST /api/ping, no size limit');
   console.log(`  (E) MMCC Backdoor      — port ${MMCC_PORT}, no auth required`);
   console.log('');
-  console.log('  Attack MMCC: ncat 192.168.8.103 5050');
+  console.log('  SQL Injection Attack:');
+  console.log("  /api/search?q=' UNION SELECT id,username,password,role,name,name,createdAt FROM users --");
   console.log('');
   console.log('  FOR EDUCATIONAL USE ONLY');
   console.log('');
